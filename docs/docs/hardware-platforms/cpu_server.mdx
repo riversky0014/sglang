@@ -11,6 +11,39 @@ and DeepSeek series like DeepSeek-R1 and DeepSeek-V3.1-Terminus.
 Please check the [SGLang Cookbook pages](https://docs.sglang.io/cookbook/intro)
 in which the support status and example commands can be found.
 
+## Experimental macOS PyTorch CPU Backend
+
+SGLang can run a limited PyTorch CPU configuration on Apple Silicon without MLX
+or the optional CPU operations from `sgl_kernel`. This experimental path is for
+development, correctness checks, and integration testing. It has been validated
+with:
+
+- macOS on Apple Silicon (`arm64`)
+- PyTorch CPU and the `torch_native` attention backend
+- a single process, tensor parallel size 1, and a small dense model
+
+The currently validated no-AOT configuration rejects speculative decoding and
+tensor parallel size greater than 1. Quantized models and performance targets
+are outside the validated scope. MLX remains a separate backend and is disabled
+in this example.
+
+After installing SGLang from source in an isolated Python environment, launch a
+small model with:
+
+```bash Command
+SGLANG_USE_CPU_ENGINE=1 \
+SGLANG_USE_MLX=0 \
+sglang serve \
+    --model-path facebook/opt-125m \
+    --device cpu \
+    --attention-backend torch_native \
+    --tp-size 1 \
+    --cuda-graph-backend-decode disabled \
+    --cuda-graph-backend-prefill disabled \
+    --disable-overlap-schedule \
+    --mem-fraction-static 0.1
+```
+
 ## Installation
 
 ### Install Using Docker
