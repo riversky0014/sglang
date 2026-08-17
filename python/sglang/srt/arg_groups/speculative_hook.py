@@ -3,12 +3,25 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from sglang.srt.server_args import ServerArgs
 
 logger = logging.getLogger(__name__)
+
+
+def _reject_unsupported_macos_cpu_speculative(server_args: ServerArgs) -> None:
+    if (
+        sys.platform == "darwin"
+        and server_args.device == "cpu"
+        and server_args.speculative_algorithm is not None
+    ):
+        raise ValueError(
+            "Speculative decoding is not supported by the experimental macOS "
+            "PyTorch CPU backend; remove --speculative-algorithm"
+        )
 
 
 def _disable_overlap_schedule_for_cpu(server_args: ServerArgs) -> None:
@@ -79,6 +92,8 @@ def handle_speculative_decoding(server_args: ServerArgs) -> None:
 
     if server_args.speculative_algorithm is not None:
         server_args.speculative_algorithm = server_args.speculative_algorithm.upper()
+
+    _reject_unsupported_macos_cpu_speculative(server_args)
 
     # Removal notice for the retired env var; raw os.getenv on purpose -- the
     # Envs descriptor is gone. Drop this check after one release.

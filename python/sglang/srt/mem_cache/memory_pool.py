@@ -28,6 +28,8 @@ import dataclasses
 import logging
 import math
 import os
+import platform
+import sys
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, fields
 from functools import cached_property
@@ -104,6 +106,9 @@ GB = 1024 * 1024 * 1024
 _is_cuda = is_cuda()
 _is_npu = is_npu()
 _is_cpu = is_cpu()
+_is_macos_arm64_cpu = (
+    _is_cpu and sys.platform == "darwin" and platform.machine().lower() == "arm64"
+)
 _cpu_has_amx_support = cpu_has_amx_support()
 _is_hip = is_hip()
 _is_fp8_fnuz = is_fp8_fnuz()
@@ -1810,7 +1815,9 @@ class MHATokenToKVPool(KVCache):
         #   X = 16 / dtype_bytes — AITER-only (ignored elsewhere, no consumer kernel).
         # HND and vectorized_5d are mutually exclusive; HND takes precedence.
         self.use_hnd = envs.SGLANG_USE_HND_KVCACHE.get()
-        self.use_native_move_kv_cache = envs.SGLANG_NATIVE_MOVE_KV_CACHE.get()
+        self.use_native_move_kv_cache = (
+            envs.SGLANG_NATIVE_MOVE_KV_CACHE.get() or _is_macos_arm64_cpu
+        )
         if kv_cache_layout is not None:
             # Explicit physical-layout selector wins over the platform default.
             # This is a label only; layouts that change buffer identity (e.g. the
@@ -1863,7 +1870,7 @@ class MHATokenToKVPool(KVCache):
             else None
         )
 
-        if enable_kv_cache_copy and not self.use_hnd:
+        if enable_kv_cache_copy and not self.use_hnd and not _is_macos_arm64_cpu:
             # The tiled byte copy assumes NHD slot-rows; HND uses a (page, off)
             # gather in move_kv_cache instead, so skip the slot-row copy config.
             self._init_kv_copy_and_warmup()

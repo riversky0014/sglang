@@ -2,12 +2,14 @@ import torch
 import triton
 import triton.language as tl
 
+from sglang.kernels.optional import get_optional_sgl_kernel
 from sglang.srt.utils import is_cpu
 
 _is_cpu = is_cpu()
 
-if _is_cpu:
-    from sgl_kernel import copy_all_layer_kv_cache_cpu
+_copy_all_layer_kv_cache_cpu = (
+    get_optional_sgl_kernel("copy_all_layer_kv_cache_cpu") if _is_cpu else None
+)
 
 
 @triton.jit
@@ -102,14 +104,19 @@ def copy_all_layer_kv_cache_func(
     num_locs_upper: int,
     kv_copy_config: dict,
 ):
-    if _is_cpu:
-        copy_all_layer_kv_cache_cpu(
+    if _copy_all_layer_kv_cache_cpu is not None:
+        _copy_all_layer_kv_cache_cpu(
             data_ptrs,
             strides,
             tgt_loc[:num_locs],
             src_loc[:num_locs],
         )
         return
+    if _is_cpu:
+        raise RuntimeError(
+            "The optional sgl_kernel CPU KV-copy op is unavailable; "
+            "use the native PyTorch KV-cache move path"
+        )
     grid = (data_ptrs.numel(), kv_copy_config["byte_tiles"])
     copy_all_layer_kv_cache_tiled[grid](
         data_ptrs,

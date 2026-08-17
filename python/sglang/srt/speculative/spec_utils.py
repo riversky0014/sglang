@@ -18,6 +18,9 @@ from sglang.kernels.ops.speculative.cache_locs import (
     assign_extend_cache_locs as assign_extend_cache_locs,
 )
 from sglang.kernels.ops.speculative.cache_locs import (
+    assign_extend_cache_locs_cpu as assign_extend_cache_locs_cpu,
+)
+from sglang.kernels.ops.speculative.cache_locs import (
     filter_finished_cache_loc_kernel as filter_finished_cache_loc_kernel,
 )
 from sglang.kernels.ops.speculative.cache_locs import (
@@ -88,10 +91,6 @@ elif _is_hip:
     from sgl_kernel import fast_topk
 else:
     from sglang.srt.utils.common import fast_topk
-
-if _is_cpu:
-    from sgl_kernel import assign_extend_cache_locs_cpu
-
 
 logger = logging.getLogger(__name__)
 

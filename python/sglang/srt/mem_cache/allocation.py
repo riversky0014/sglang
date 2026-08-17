@@ -13,6 +13,7 @@ from sglang.kernels.ops.memory.common import (
     get_last_loc_triton_safe,
     write_req_to_token_pool_triton,
 )
+from sglang.kernels.optional import get_optional_sgl_kernel
 from sglang.srt.hardware_backend.npu.dsv4.dsv4_common_hooks import (
     maybe_write_dsv4_decode,
     maybe_write_dsv4_extend,
@@ -42,8 +43,9 @@ _is_npu = is_npu()
 _is_cuda = is_cuda()
 _is_cpu = is_cpu()
 
-if _is_cpu:
-    from sgl_kernel import assign_req_to_token_pool_cpu
+_assign_req_to_token_pool_cpu = (
+    get_optional_sgl_kernel("assign_req_to_token_pool_cpu") if _is_cpu else None
+)
 
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req, ScheduleBatch
@@ -608,8 +610,8 @@ def assign_req_to_token_pool_func(
     out_cache_loc: torch.Tensor,
     batch_size: int,
 ):
-    if _is_cpu:
-        assign_req_to_token_pool_cpu(
+    if _assign_req_to_token_pool_cpu is not None:
+        _assign_req_to_token_pool_cpu(
             req_pool_indices,
             req_to_token,
             start_offset,
@@ -617,6 +619,18 @@ def assign_req_to_token_pool_func(
             out_cache_loc,
             req_to_token.shape[1],
         )
+        return
+    if _is_cpu:
+        out_offset = 0
+        for i in range(batch_size):
+            req_idx = int(req_pool_indices[i].item())
+            start = int(start_offset[i].item())
+            end = int(end_offset[i].item())
+            length = end - start
+            req_to_token[req_idx, start:end].copy_(
+                out_cache_loc[out_offset : out_offset + length]
+            )
+            out_offset += length
         return
     assign_req_to_token_pool[(batch_size,)](
         req_pool_indices,

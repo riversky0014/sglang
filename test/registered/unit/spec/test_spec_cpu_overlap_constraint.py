@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from sglang.srt.arg_groups.speculative_hook import handle_speculative_decoding
 from sglang.srt.server_args import ServerArgs
@@ -35,14 +36,16 @@ class TestSpecCPUOverlapConstraint(CustomTestCase):
         args = _make_spec_args(device="cpu")
         self.assertFalse(args.disable_overlap_schedule)
 
-        handle_speculative_decoding(args)
+        with patch("sglang.srt.arg_groups.speculative_hook.sys.platform", "linux"):
+            handle_speculative_decoding(args)
 
         self.assertTrue(args.disable_overlap_schedule)
 
     def test_cpu_eagle3_forces_disable_overlap_schedule(self):
         args = _make_spec_args(device="cpu", algorithm="EAGLE3")
 
-        handle_speculative_decoding(args)
+        with patch("sglang.srt.arg_groups.speculative_hook.sys.platform", "linux"):
+            handle_speculative_decoding(args)
 
         self.assertTrue(args.disable_overlap_schedule)
 
@@ -54,7 +57,8 @@ class TestSpecCPUOverlapConstraint(CustomTestCase):
         with self.assertLogs(
             "sglang.srt.arg_groups.speculative_hook", "WARNING"
         ) as logs:
-            handle_speculative_decoding(args)
+            with patch("sglang.srt.arg_groups.speculative_hook.sys.platform", "linux"):
+                handle_speculative_decoding(args)
 
         self.assertTrue(args.disable_overlap_schedule)
         self.assertFalse(
@@ -69,6 +73,15 @@ class TestSpecCPUOverlapConstraint(CustomTestCase):
         handle_speculative_decoding(args)
 
         self.assertFalse(args.disable_overlap_schedule)
+
+    def test_macos_cpu_rejects_speculative_decoding_up_front(self):
+        args = _make_spec_args(device="cpu", algorithm="NGRAM")
+
+        with patch("sglang.srt.arg_groups.speculative_hook.sys.platform", "darwin"):
+            with self.assertRaisesRegex(
+                ValueError, "experimental macOS PyTorch CPU backend"
+            ):
+                handle_speculative_decoding(args)
 
 
 if __name__ == "__main__":

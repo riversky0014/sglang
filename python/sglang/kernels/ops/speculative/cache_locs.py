@@ -5,6 +5,7 @@ import triton
 import triton.language as tl
 
 from sglang._torch_compile import sglang_compile
+from sglang.kernels.optional import get_optional_sgl_kernel
 from sglang.srt.utils import (
     is_cpu,
     is_cuda,
@@ -22,8 +23,33 @@ _is_npu = is_npu()
 _is_musa = is_musa()
 _is_xpu = is_xpu()
 
-if _is_cpu:
-    from sgl_kernel import assign_extend_cache_locs_cpu
+_assign_extend_cache_locs_cpu = (
+    get_optional_sgl_kernel("assign_extend_cache_locs_cpu") if _is_cpu else None
+)
+
+
+def assign_extend_cache_locs_cpu(
+    req_pool_indices: torch.Tensor,
+    req_to_token: torch.Tensor,
+    start_offset: torch.Tensor,
+    end_offset: torch.Tensor,
+    out_cache_loc: torch.Tensor,
+    pool_len: int,
+) -> None:
+    """Pack CPU request-token locations with the required AOT kernel."""
+    if _assign_extend_cache_locs_cpu is None:
+        raise RuntimeError(
+            "CPU speculative decoding requires the optional "
+            "sgl_kernel.assign_extend_cache_locs_cpu operation"
+        )
+    _assign_extend_cache_locs_cpu(
+        req_pool_indices,
+        req_to_token,
+        start_offset,
+        end_offset,
+        out_cache_loc,
+        pool_len,
+    )
 
 
 @triton.jit

@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from typing import List, Optional
 
@@ -178,12 +179,28 @@ def _init_cpu_threads_env(
     *, tp_size: int, tp_rank: int, local_omp_cpuid: Optional[List[int]]
 ) -> None:
     if _is_cpu_amx_available or _is_cpu_arm64:
-        # Bind OpenMP threads to CPU cores
-        torch.ops.sgl_kernel.init_cpu_threads_env(local_omp_cpuid)
+        cpu_ops = torch.ops.sgl_kernel
+        if sys.platform == "darwin" and (
+            getattr(cpu_ops, "init_cpu_threads_env", None) is None
+            or getattr(cpu_ops, "initialize", None) is None
+        ):
+            if tp_size > 1:
+                raise RuntimeError(
+                    "CPU tensor parallelism without the sgl_kernel shared-memory "
+                    "collective is not supported; use --tp-size 1"
+                )
+            logger.info(
+                "sgl_kernel CPU initialization is unavailable on macOS; "
+                "continuing with PyTorch defaults for TP=1"
+            )
+            return
 
-        # Set local size to hint SGLang to use shared memory based AllReduce
+        # Bind OpenMP threads to CPU cores.
+        cpu_ops.init_cpu_threads_env(local_omp_cpuid)
+
+        # Set local size to hint SGLang to use shared memory based AllReduce.
         os.environ["LOCAL_SIZE"] = str(tp_size)
-        torch.ops.sgl_kernel.initialize(tp_size, tp_rank)
+        cpu_ops.initialize(tp_size, tp_rank)
 
     else:
         logger.warning(

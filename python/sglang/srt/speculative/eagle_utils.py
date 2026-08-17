@@ -11,6 +11,7 @@ from sglang.kernels.ops.speculative.spec_tree import (
     sgl_build_tree_kernel_efficient_triton,
     verify_tree_greedy_kernel_triton,
 )
+from sglang.kernels.optional import get_optional_sgl_kernel
 from sglang.srt.hardware_backend.npu.dsv4.dsv4_common_hooks import (
     maybe_build_dsv4_verify_bundle,
 )
@@ -51,10 +52,10 @@ if _is_cuda or _is_hip or _is_musa:
         build_tree_kernel_efficient as sgl_build_tree_kernel_efficient,
     )
 elif _is_cpu:
-    from sgl_kernel import (
-        build_tree_kernel_efficient_cpu as sgl_build_tree_kernel_efficient_cpu,
+    sgl_build_tree_kernel_efficient_cpu = get_optional_sgl_kernel(
+        "build_tree_kernel_efficient_cpu"
     )
-    from sgl_kernel import verify_tree_greedy_cpu as sgl_verify_tree_greedy_cpu
+    sgl_verify_tree_greedy_cpu = get_optional_sgl_kernel("verify_tree_greedy_cpu")
 
 
 def per_step_draft_out_cache_loc(
@@ -250,6 +251,11 @@ def build_tree_kernel_efficient(
             tree_mask_mode,
         )
     elif _is_cpu:
+        if sgl_build_tree_kernel_efficient_cpu is None:
+            raise RuntimeError(
+                "EAGLE tree construction on CPU requires the optional "
+                "sgl_kernel CPU extension"
+            )
         sgl_build_tree_kernel_efficient_cpu(
             parent_list,
             top_scores_index,
@@ -398,6 +404,11 @@ def verify_tree_greedy_func(
         )
 
     elif _is_cpu:
+        if sgl_verify_tree_greedy_cpu is None:
+            raise RuntimeError(
+                "EAGLE tree verification on CPU requires the optional "
+                "sgl_kernel CPU extension"
+            )
         sgl_verify_tree_greedy_cpu(
             predicts=predicts,  # mutable
             accept_index=accept_index,  # mutable
