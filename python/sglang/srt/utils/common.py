@@ -4077,6 +4077,16 @@ def ceil_div(x: int, y: int) -> int:
 
 
 def parse_lscpu_topology():
+    if platform.system() == "Darwin":
+        # macOS has no lscpu or NUMA nodes.  Build a count-only UMA
+        # representation with one synthetic CPU id per physical core.  These
+        # ids describe capacity; they are not affinity handles and do not model
+        # Apple Silicon performance/efficiency core groups.
+        cpu_count = psutil.cpu_count(logical=False)
+        if cpu_count is None:
+            cpu_count = psutil.cpu_count(logical=True) or 1
+        return [(cpu, cpu, 0, 0) for cpu in range(cpu_count)]
+
     try:
         # Get CPU topology: CPU,Core,Socket,Node
         output = subprocess.check_output(
@@ -4118,7 +4128,12 @@ def get_physical_cpus_by_numa():
             ] = cpu  # pick first CPU seen for that physical core
 
     # Retrieves CPUs that the current process is allowed to run on
-    cpus_allowed_list = psutil.Process().cpu_affinity()
+    try:
+        cpus_allowed_list = psutil.Process().cpu_affinity()
+    except (AttributeError, NotImplementedError):
+        # cpu_affinity is unavailable on macOS.  In that case all CPUs from
+        # the discovered topology are available to the process.
+        cpus_allowed_list = [cpu for cpu, _, _, _ in cpu_info]
 
     # Convert to list of physical CPUs per node
     # 0: [0,1,2,...,42]
